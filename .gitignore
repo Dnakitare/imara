@@ -6,3 +6,4 @@ dist/
 .next/
 .env
 .env.local
+RELEASE.md
