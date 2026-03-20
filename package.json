@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "description": "Runtime governance layer for AI agents",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dnakitare/imara.git"
+  },
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
