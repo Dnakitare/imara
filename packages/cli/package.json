@@ -1,0 +1,27 @@
+{
+  "name": "imara",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "imara": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@imara/core": "workspace:*",
+    "@imara/store": "workspace:*",
+    "@imara/proxy": "workspace:*",
+    "@imara/policy": "workspace:*",
+    "commander": "^13.0.0",
+    "chalk": "^5.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "@types/node": "^22.0.0"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "imara",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Runtime governance layer for AI agents",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "clean": "turbo clean"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "@types/node": "^22.0.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

@@ -1,0 +1,48 @@
+import { createHash } from 'node:crypto';
+
+export interface HashableEvent {
+  id: string;
+  timestamp: string;
+  sessionId: string;
+  serverName: string;
+  toolName: string;
+  toolArguments: Record<string, unknown>;
+  policyDecision: string;
+  prevHash: string | null;
+}
+
+export function computeEventHash(event: HashableEvent): string {
+  const payload = JSON.stringify({
+    id: event.id,
+    timestamp: event.timestamp,
+    sessionId: event.sessionId,
+    serverName: event.serverName,
+    toolName: event.toolName,
+    toolArguments: event.toolArguments,
+    policyDecision: event.policyDecision,
+    prevHash: event.prevHash,
+  });
+  return createHash('sha256').update(payload).digest('hex');
+}
+
+export function verifyChain(events: HashableEvent[]): { valid: boolean; brokenAt?: number } {
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    const expectedHash = computeEventHash(event);
+
+    // Verify hash matches (event must carry its own hash for comparison)
+    if ('eventHash' in event && (event as any).eventHash !== expectedHash) {
+      return { valid: false, brokenAt: i };
+    }
+
+    // Verify chain linkage (skip first event)
+    if (i > 0) {
+      const prevEvent = events[i - 1];
+      const prevHash = 'eventHash' in prevEvent ? (prevEvent as any).eventHash : computeEventHash(prevEvent);
+      if (event.prevHash !== prevHash) {
+        return { valid: false, brokenAt: i };
+      }
+    }
+  }
+  return { valid: true };
+}
