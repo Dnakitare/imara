@@ -11,5 +11,5 @@ export function loadPolicyFile(filePath: string): PolicyRule[] {
 export function parsePolicyYaml(content: string): PolicyRule[] {
   const raw = parseYaml(content);
   const config = PolicyConfigSchema.parse(raw);
-  return config.policies;
+  return config.policies as PolicyRule[];
 }

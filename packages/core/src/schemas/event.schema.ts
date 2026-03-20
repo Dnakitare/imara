@@ -16,7 +16,7 @@ export const AuditEventSchema = z.object({
   policiesEvaluated: z.array(z.string()),
   resultStatus: z.enum(['success', 'error', 'blocked']).optional(),
   resultSummary: z.string().optional(),
-  resultLatencyMs: z.number().int().nonneg().optional(),
+  resultLatencyMs: z.number().int().nonnegative().optional(),
   prevHash: z.string().nullable(),
   eventHash: z.string(),
 });
