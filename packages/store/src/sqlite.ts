@@ -165,7 +165,7 @@ export class SqliteAuditStore implements AuditStore {
 
   getSessionIds(): string[] {
     const rows = this.db.prepare(
-      'SELECT DISTINCT session_id FROM events WHERE session_id IS NOT NULL ORDER BY MIN(timestamp) DESC'
+      'SELECT session_id FROM events WHERE session_id IS NOT NULL GROUP BY session_id ORDER BY MIN(timestamp) DESC'
     ).all() as any[];
     return rows.map(r => r.session_id);
   }

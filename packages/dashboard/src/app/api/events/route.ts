@@ -28,9 +28,29 @@ export async function GET(request: NextRequest) {
     });
     const total = store.getEventCount();
     const sessions = store.getSessionIds();
+
+    // Get all events for stats (or recent window)
+    const allRecent = store.query({ limit: 10000 });
+    const stats = {
+      total: allRecent.length,
+      allowed: allRecent.filter(e => e.policyDecision === 'allow').length,
+      denied: allRecent.filter(e => e.policyDecision === 'deny').length,
+      escalated: allRecent.filter(e => e.policyDecision === 'escalate').length,
+      flagged: allRecent.filter(e =>
+        e.policiesEvaluated.some((p: string) => p !== 'log-all')
+      ).length,
+      avgLatency: Math.round(
+        allRecent.filter(e => e.resultLatencyMs != null)
+          .reduce((sum: number, e: any) => sum + (e.resultLatencyMs ?? 0), 0) /
+        (allRecent.filter(e => e.resultLatencyMs != null).length || 1)
+      ),
+    };
+
+    const isDemo = total <= 40 && allRecent.length > 0 && allRecent.every((e: any) => e.sessionId === allRecent[0]?.sessionId);
+
     store.close();
 
-    return NextResponse.json({ events, total, sessions });
+    return NextResponse.json({ events, total, sessions, stats, isDemo });
   } catch (err) {
     return NextResponse.json(
       { error: 'Failed to query events', detail: String(err) },

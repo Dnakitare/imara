@@ -18,10 +18,21 @@ interface AuditEvent {
   resultLatencyMs?: number;
 }
 
+interface TimelineStats {
+  total: number;
+  allowed: number;
+  denied: number;
+  escalated: number;
+  flagged: number;
+  avgLatency: number;
+}
+
 interface TimelineData {
   events: AuditEvent[];
   total: number;
   sessions: string[];
+  stats: TimelineStats;
+  isDemo: boolean;
 }
 
 export function Timeline() {
@@ -64,27 +75,53 @@ export function Timeline() {
     return () => clearInterval(interval);
   }, [fetchEvents]);
 
-  const stats = data ? {
-    total: data.total,
-    allowed: data.events.filter(e => e.policyDecision === 'allow').length,
-    denied: data.events.filter(e => e.policyDecision === 'deny').length,
-    avgLatency: Math.round(
-      data.events
-        .filter(e => e.resultLatencyMs != null)
-        .reduce((sum, e) => sum + (e.resultLatencyMs ?? 0), 0) /
-      (data.events.filter(e => e.resultLatencyMs != null).length || 1)
-    ),
-  } : null;
+  const stats = data?.stats ?? null;
 
   return (
     <div>
-      {/* Stats bar */}
+      {/* Demo banner */}
+      {data?.isDemo && (
+        <div className="mb-6 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3">
+          <p className="text-sm text-blue-300">
+            <span className="font-medium">This is a sample session.</span>{' '}
+            Your real agent activity will appear here automatically once you start using your AI agent.
+          </p>
+        </div>
+      )}
+
+      {/* Risk summary banner */}
       {stats && (
-        <div className="mb-6 grid grid-cols-4 gap-4">
-          <StatCard label="Total Events" value={stats.total} />
-          <StatCard label="Allowed" value={stats.allowed} color="text-emerald-400" />
-          <StatCard label="Denied" value={stats.denied} color="text-red-400" />
-          <StatCard label="Avg Latency" value={`${stats.avgLatency}ms`} />
+        <div className="mb-6 rounded-lg border border-[var(--border)] bg-[var(--card)] p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-[var(--muted-foreground)]">Activity Summary</h3>
+              <p className="mt-1 text-lg">
+                <span className="font-bold text-white">{stats.total}</span>
+                <span className="text-[var(--muted-foreground)]"> tool calls</span>
+                {stats.denied > 0 && (
+                  <>
+                    <span className="mx-2 text-[var(--border)]">&middot;</span>
+                    <span className="font-bold text-red-400">{stats.denied}</span>
+                    <span className="text-[var(--muted-foreground)]"> blocked</span>
+                  </>
+                )}
+                {stats.flagged > 0 && (
+                  <>
+                    <span className="mx-2 text-[var(--border)]">&middot;</span>
+                    <span className="font-bold text-yellow-400">{stats.flagged}</span>
+                    <span className="text-[var(--muted-foreground)]"> flagged</span>
+                  </>
+                )}
+                <span className="mx-2 text-[var(--border)]">&middot;</span>
+                <span className="text-[var(--muted-foreground)]">Chain integrity </span>
+                <span className="text-emerald-400">&#x2713;</span>
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-[var(--muted-foreground)]">Avg latency</p>
+              <p className="text-lg font-bold text-white">{stats.avgLatency}ms</p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -185,15 +222,6 @@ export function Timeline() {
           </button>
         </div>
       )}
-    </div>
-  );
-}
-
-function StatCard({ label, value, color }: { label: string; value: string | number; color?: string }) {
-  return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
-      <p className="text-xs text-[var(--muted-foreground)]">{label}</p>
-      <p className={`mt-1 text-2xl font-bold ${color ?? 'text-white'}`}>{value}</p>
     </div>
   );
 }

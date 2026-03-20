@@ -8,6 +8,7 @@ import { registerUnwrapCommand } from './commands/unwrap.js';
 import { registerVerifyCommand } from './commands/verify.js';
 import { registerStatusCommand } from './commands/status.js';
 import { registerDashboardCommand } from './commands/dashboard.js';
+import { runSetup } from './commands/setup.js';
 
 const program = new Command();
 
@@ -24,5 +25,10 @@ registerUnwrapCommand(program);
 registerVerifyCommand(program);
 registerStatusCommand(program);
 registerDashboardCommand(program);
+
+// If no subcommand given, run the default setup flow
+program.action(async () => {
+  await runSetup();
+});
 
 program.parse();
