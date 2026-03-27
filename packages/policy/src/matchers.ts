@@ -1,6 +1,36 @@
 import picomatch from 'picomatch';
 import type { ToolMatcher, ArgumentMatcher } from '@imara/core';
 
+// Cache compiled regex patterns to avoid re-compilation
+const regexCache = new Map<string, RegExp | null>();
+const MAX_REGEX_CACHE = 1000;
+const MAX_REGEX_PATTERN_LENGTH = 500;
+
+/**
+ * Safely compile a regex pattern. Returns null if the pattern is invalid
+ * or too complex (potential ReDoS).
+ */
+function safeRegex(pattern: string): RegExp | null {
+  if (pattern.length > MAX_REGEX_PATTERN_LENGTH) return null;
+
+  const cached = regexCache.get(pattern);
+  if (cached !== undefined) return cached;
+
+  try {
+    const re = new RegExp(pattern);
+    // Evict oldest entries if cache is full
+    if (regexCache.size >= MAX_REGEX_CACHE) {
+      const firstKey = regexCache.keys().next().value;
+      if (firstKey !== undefined) regexCache.delete(firstKey);
+    }
+    regexCache.set(pattern, re);
+    return re;
+  } catch {
+    regexCache.set(pattern, null);
+    return null;
+  }
+}
+
 export function matchesTool(
   matcher: ToolMatcher,
   toolName: string,
@@ -36,9 +66,12 @@ function matchArgument(
       return Array.isArray(matcher.value) && matcher.value.includes(value);
     case 'not_in':
       return Array.isArray(matcher.value) && !matcher.value.includes(value);
-    case 'matches':
-      return typeof value === 'string' && typeof matcher.value === 'string'
-        && new RegExp(matcher.value).test(value);
+    case 'matches': {
+      if (typeof value !== 'string' || typeof matcher.value !== 'string') return false;
+      const re = safeRegex(matcher.value);
+      if (!re) return false;
+      return re.test(value);
+    }
     case 'contains':
       return typeof value === 'string' && typeof matcher.value === 'string'
         && value.includes(matcher.value);
@@ -48,9 +81,13 @@ function matchArgument(
 }
 
 function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
-  return path.split('.').reduce<unknown>((acc, key) => {
-    if (acc && typeof acc === 'object' && key in (acc as Record<string, unknown>)) {
-      return (acc as Record<string, unknown>)[key];
+  const keys = path.split('.');
+  return keys.reduce<unknown>((acc, key) => {
+    if (acc && typeof acc === 'object' && !Array.isArray(acc)) {
+      const record = acc as Record<string, unknown>;
+      if (Object.prototype.hasOwnProperty.call(record, key)) {
+        return record[key];
+      }
     }
     return undefined;
   }, obj);

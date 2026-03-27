@@ -5,23 +5,36 @@ export interface HashableEvent {
   timestamp: string;
   sessionId: string;
   serverName: string;
+  agentId?: string;
   toolName: string;
   toolArguments: Record<string, unknown>;
+  toolAnnotations?: Record<string, unknown>;
   policyDecision: string;
+  policiesEvaluated?: string[];
+  resultStatus?: string;
   prevHash: string | null;
 }
 
+/**
+ * Compute a SHA-256 hash of an audit event.
+ * Uses explicit key ordering to ensure deterministic serialization.
+ */
 export function computeEventHash(event: HashableEvent): string {
-  const payload = JSON.stringify({
-    id: event.id,
-    timestamp: event.timestamp,
-    sessionId: event.sessionId,
-    serverName: event.serverName,
-    toolName: event.toolName,
-    toolArguments: event.toolArguments,
-    policyDecision: event.policyDecision,
-    prevHash: event.prevHash,
-  });
+  // Explicit key ordering for deterministic hashing across environments
+  const payload = JSON.stringify([
+    event.id,
+    event.timestamp,
+    event.sessionId,
+    event.serverName,
+    event.agentId ?? null,
+    event.toolName,
+    event.toolArguments,
+    event.toolAnnotations ?? null,
+    event.policyDecision,
+    event.policiesEvaluated ?? [],
+    event.resultStatus ?? null,
+    event.prevHash,
+  ]);
   return createHash('sha256').update(payload).digest('hex');
 }
 

@@ -9,9 +9,11 @@ interface ToolCallContext {
 }
 
 interface RateLimitState {
-  key: string;
   timestamps: number[];
+  lastAccess: number;
 }
+
+const MAX_RATE_LIMIT_ENTRIES = 10000;
 
 export class PolicyEngine {
   private rules: PolicyRule[] = [];
@@ -44,8 +46,10 @@ export class PolicyEngine {
 
       matchedPolicies.push(rule.name);
 
-      // Check rate limit if applicable
+      // Check rate limit if applicable — record hit BEFORE checking
+      // so the first call counts toward the limit
       if (rule.rateLimit) {
+        this.recordRateLimitHit(rule, context);
         const exceeded = this.checkRateLimit(rule, context);
         if (exceeded) {
           return {
@@ -72,8 +76,9 @@ export class PolicyEngine {
       // 'log' action doesn't change decision, just records the match
     }
 
-    // Record rate limit hit for allowed calls
-    this.recordRateLimitHit(context);
+    // Record rate limit hit for allowed calls (for rules without rateLimit
+    // that still need tracking, this is a no-op since we skip non-rateLimit rules)
+    this.recordAllowedRateLimitHits(context);
 
     return {
       decision: finalAction,
@@ -97,11 +102,29 @@ export class PolicyEngine {
     const windowStart = now - rule.rateLimit.windowSeconds * 1000;
     const recentCalls = state.timestamps.filter(t => t >= windowStart);
 
-    return recentCalls.length >= rule.rateLimit.maxCalls;
+    return recentCalls.length > rule.rateLimit.maxCalls;
   }
 
-  private recordRateLimitHit(context: ToolCallContext): void {
+  private recordRateLimitHit(rule: PolicyRule, context: ToolCallContext): void {
+    if (!rule.rateLimit) return;
+
     const now = Date.now();
+    const key = this.getRateLimitKey(rule, context);
+    const state = this.rateLimitState.get(key) ?? { timestamps: [], lastAccess: now };
+    state.timestamps.push(now);
+    state.lastAccess = now;
+
+    // Clean old entries within this bucket
+    const windowStart = now - rule.rateLimit.windowSeconds * 1000;
+    state.timestamps = state.timestamps.filter(t => t >= windowStart);
+    this.rateLimitState.set(key, state);
+
+    // Evict stale entries if map is too large
+    this.evictStaleEntries();
+  }
+
+  /** Record hits for rate-limited rules that matched but weren't the deciding rule. */
+  private recordAllowedRateLimitHits(context: ToolCallContext): void {
     for (const rule of this.rules) {
       if (!rule.rateLimit) continue;
       const toolMatches = rule.match.tools.some(tm =>
@@ -109,14 +132,26 @@ export class PolicyEngine {
       );
       if (!toolMatches) continue;
 
+      // Only record if we haven't already (rules with rateLimit record during evaluate)
       const key = this.getRateLimitKey(rule, context);
-      const state = this.rateLimitState.get(key) ?? { key, timestamps: [] };
-      state.timestamps.push(now);
+      const state = this.rateLimitState.get(key);
+      if (!state) {
+        // First time seeing this key from an allowed path
+        this.recordRateLimitHit(rule, context);
+      }
+    }
+  }
 
-      // Clean old entries
-      const windowStart = now - rule.rateLimit.windowSeconds * 1000;
-      state.timestamps = state.timestamps.filter(t => t >= windowStart);
-      this.rateLimitState.set(key, state);
+  private evictStaleEntries(): void {
+    if (this.rateLimitState.size <= MAX_RATE_LIMIT_ENTRIES) return;
+
+    // Evict entries with empty timestamps or oldest lastAccess
+    const entries = [...this.rateLimitState.entries()]
+      .sort((a, b) => a[1].lastAccess - b[1].lastAccess);
+
+    const toRemove = entries.slice(0, entries.length - MAX_RATE_LIMIT_ENTRIES);
+    for (const [key] of toRemove) {
+      this.rateLimitState.delete(key);
     }
   }
 }

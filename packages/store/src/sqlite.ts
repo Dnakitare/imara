@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AuditEvent } from '@imara/core';
-import type { AuditStore, EventQuery } from './store.js';
+import { computeEventHash } from '@imara/core';
+import type { AuditStore, EventQuery, AppendEventParams } from './store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -45,22 +46,23 @@ export class SqliteAuditStore implements AuditStore {
           server_name     TEXT,
           agent_id        TEXT,
           tool_name       TEXT NOT NULL,
-          tool_arguments  TEXT NOT NULL,
+          tool_arguments  TEXT NOT NULL CHECK(length(tool_arguments) <= 1048576),
           tool_annotations TEXT,
           policy_decision TEXT NOT NULL DEFAULT 'allow',
           policy_reason   TEXT,
           policies_evaluated TEXT,
-          result_status   TEXT,
+          result_status   TEXT CHECK(result_status IN ('success', 'error', 'blocked') OR result_status IS NULL),
           result_summary  TEXT,
-          result_latency_ms INTEGER,
+          result_latency_ms INTEGER CHECK(result_latency_ms >= 0 OR result_latency_ms IS NULL),
           prev_hash       TEXT,
-          event_hash      TEXT NOT NULL,
+          event_hash      TEXT NOT NULL UNIQUE,
           created_at      TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp DESC);
         CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
         CREATE INDEX IF NOT EXISTS idx_events_tool ON events(tool_name);
         CREATE INDEX IF NOT EXISTS idx_events_decision ON events(policy_decision);
+        CREATE INDEX IF NOT EXISTS idx_events_hash ON events(event_hash);
       `;
     }
 
@@ -102,6 +104,93 @@ export class SqliteAuditStore implements AuditStore {
       prevHash: event.prevHash,
       eventHash: event.eventHash,
     });
+  }
+
+  appendAtomic(params: AppendEventParams): AuditEvent {
+    const insertStmt = this.db.prepare(`
+      INSERT INTO events (
+        id, timestamp, session_id, server_name, agent_id,
+        tool_name, tool_arguments, tool_annotations,
+        policy_decision, policy_reason, policies_evaluated,
+        result_status, result_summary, result_latency_ms,
+        prev_hash, event_hash
+      ) VALUES (
+        @id, @timestamp, @sessionId, @serverName, @agentId,
+        @toolName, @toolArguments, @toolAnnotations,
+        @policyDecision, @policyReason, @policiesEvaluated,
+        @resultStatus, @resultSummary, @resultLatencyMs,
+        @prevHash, @eventHash
+      )
+    `);
+
+    const latestHashStmt = this.db.prepare(
+      'SELECT event_hash FROM events ORDER BY created_at DESC, rowid DESC LIMIT 1'
+    );
+
+    // Run inside a transaction so getLatestHash + insert is atomic
+    const result = this.db.transaction(() => {
+      const row = latestHashStmt.get() as any;
+      const prevHash: string | null = row?.event_hash ?? null;
+
+      const hashableEvent = {
+        id: params.id,
+        timestamp: params.timestamp,
+        sessionId: params.sessionId,
+        serverName: params.serverName,
+        agentId: params.agentId,
+        toolName: params.toolName,
+        toolArguments: params.toolArguments,
+        toolAnnotations: params.toolAnnotations,
+        policyDecision: params.policyDecision,
+        policiesEvaluated: params.policiesEvaluated,
+        resultStatus: params.resultStatus,
+        prevHash,
+      };
+
+      const eventHash = computeEventHash(hashableEvent);
+
+      const event: AuditEvent = {
+        id: params.id,
+        timestamp: params.timestamp,
+        sessionId: params.sessionId,
+        serverName: params.serverName,
+        agentId: params.agentId,
+        toolName: params.toolName,
+        toolArguments: params.toolArguments,
+        toolAnnotations: params.toolAnnotations,
+        policyDecision: params.policyDecision as AuditEvent['policyDecision'],
+        policyReason: params.policyReason,
+        policiesEvaluated: params.policiesEvaluated,
+        resultStatus: params.resultStatus,
+        resultSummary: params.resultSummary,
+        resultLatencyMs: params.resultLatencyMs,
+        prevHash,
+        eventHash,
+      };
+
+      insertStmt.run({
+        id: event.id,
+        timestamp: event.timestamp,
+        sessionId: event.sessionId,
+        serverName: event.serverName,
+        agentId: event.agentId ?? null,
+        toolName: event.toolName,
+        toolArguments: JSON.stringify(event.toolArguments),
+        toolAnnotations: event.toolAnnotations ? JSON.stringify(event.toolAnnotations) : null,
+        policyDecision: event.policyDecision,
+        policyReason: event.policyReason ?? null,
+        policiesEvaluated: JSON.stringify(event.policiesEvaluated),
+        resultStatus: event.resultStatus ?? null,
+        resultSummary: event.resultSummary ?? null,
+        resultLatencyMs: event.resultLatencyMs ?? null,
+        prevHash: event.prevHash,
+        eventHash: event.eventHash,
+      });
+
+      return event;
+    })();
+
+    return result;
   }
 
   query(filter: EventQuery): AuditEvent[] {

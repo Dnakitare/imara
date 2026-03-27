@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type { AuditEvent, PolicyDecisionType } from '@imara/core';
-import { computeEventHash } from '@imara/core';
 import type { AuditStore } from '@imara/store';
 import type { PolicyEngine } from '@imara/policy';
 
@@ -47,24 +46,12 @@ export class ToolCallInterceptor {
     resultSummary?: string;
     resultLatencyMs?: number;
   }): AuditEvent {
-    const prevHash = this.store.getLatestHash();
     const id = randomUUID();
     const timestamp = new Date().toISOString();
 
-    const hashableEvent = {
-      id,
-      timestamp,
-      sessionId: this.sessionId,
-      serverName: this.serverName,
-      toolName: params.toolName,
-      toolArguments: params.toolArguments,
-      policyDecision: params.policyDecision,
-      prevHash,
-    };
-
-    const eventHash = computeEventHash(hashableEvent);
-
-    const event: AuditEvent = {
+    // Use atomic append — getLatestHash + hash computation + insert
+    // all happen inside a single SQLite transaction to prevent race conditions
+    return this.store.appendAtomic({
       id,
       timestamp,
       sessionId: this.sessionId,
@@ -78,11 +65,6 @@ export class ToolCallInterceptor {
       resultStatus: params.resultStatus,
       resultSummary: params.resultSummary,
       resultLatencyMs: params.resultLatencyMs,
-      prevHash,
-      eventHash,
-    };
-
-    this.store.append(event);
-    return event;
+    });
   }
 }

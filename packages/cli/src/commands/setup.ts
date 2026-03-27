@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
@@ -23,17 +23,17 @@ export async function runSetup(): Promise<void> {
   // Step 1: Auto-init if needed
   const alreadyInitialized = existsSync(IMARA_HOME);
   if (!alreadyInitialized) {
-    mkdirSync(IMARA_HOME, { recursive: true });
-    mkdirSync(IMARA_POLICIES_DIR, { recursive: true });
-    mkdirSync(IMARA_BACKUPS_DIR, { recursive: true });
+    mkdirSync(IMARA_HOME, { recursive: true, mode: 0o700 });
+    mkdirSync(IMARA_POLICIES_DIR, { recursive: true, mode: 0o700 });
+    mkdirSync(IMARA_BACKUPS_DIR, { recursive: true, mode: 0o700 });
 
     const config = {
       version: '0.1.0',
       store: { type: 'sqlite', path: IMARA_DB },
       policies: { directory: IMARA_POLICIES_DIR },
     };
-    writeFileSync(IMARA_CONFIG, JSON.stringify(config, null, 2));
-    writeFileSync(IMARA_DEFAULT_POLICY, getDefaultPolicyYaml());
+    writeFileSync(IMARA_CONFIG, JSON.stringify(config, null, 2), { mode: 0o600 });
+    writeFileSync(IMARA_DEFAULT_POLICY, getDefaultPolicyYaml(), { mode: 0o600 });
     console.log(chalk.green('  ✓') + ' Initialized ~/.imara/');
   } else {
     console.log(chalk.green('  ✓') + ' ~/.imara/ already configured');
@@ -65,7 +65,8 @@ export async function runSetup(): Promise<void> {
       const raw = readFileSync(mcpConfigPath, 'utf-8');
       const config = JSON.parse(raw);
       const servers = config.mcpServers ?? {};
-      const alreadyWrapped = Object.values(servers).every((s: any) =>
+      const serverCount = Object.keys(servers).length;
+      const alreadyWrapped = serverCount > 0 && Object.values(servers).every((s: any) =>
         s.args?.includes('imara') && s.args?.includes('proxy')
       );
 
@@ -82,7 +83,7 @@ export async function runSetup(): Promise<void> {
         for (const [name, server] of Object.entries(servers) as [string, any][]) {
           if (server.args?.includes('imara') && server.args?.includes('proxy')) continue;
 
-          const downstreamArgs = server.args?.join(',') ?? '';
+          const downstreamArgs = JSON.stringify(server.args ?? []);
           servers[name] = {
             command: 'npx',
             args: [

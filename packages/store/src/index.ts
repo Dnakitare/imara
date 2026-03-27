@@ -1,2 +1,2 @@
 export { SqliteAuditStore } from './sqlite.js';
-export type { AuditStore, EventQuery } from './store.js';
+export type { AuditStore, EventQuery, AppendEventParams } from './store.js';

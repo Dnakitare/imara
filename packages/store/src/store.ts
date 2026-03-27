@@ -11,8 +11,28 @@ export interface EventQuery {
   offset?: number;
 }
 
+/** Params for atomic append — the store computes prevHash inside a transaction. */
+export interface AppendEventParams {
+  id: string;
+  timestamp: string;
+  sessionId: string;
+  serverName: string;
+  agentId?: string;
+  toolName: string;
+  toolArguments: Record<string, unknown>;
+  toolAnnotations?: Record<string, unknown>;
+  policyDecision: string;
+  policyReason?: string;
+  policiesEvaluated: string[];
+  resultStatus?: 'success' | 'error' | 'blocked';
+  resultSummary?: string;
+  resultLatencyMs?: number;
+}
+
 export interface AuditStore {
   append(event: AuditEvent): void;
+  /** Atomically reads prevHash, computes event hash, and inserts. Returns the complete event. */
+  appendAtomic(params: AppendEventParams): AuditEvent;
   query(filter: EventQuery): AuditEvent[];
   getLatestHash(): string | null;
   getEventCount(): number;
