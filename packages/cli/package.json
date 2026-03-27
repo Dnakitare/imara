@@ -1,6 +1,6 @@
 {
   "name": "imara",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Runtime governance layer for AI agents — audit trails, policy enforcement, and compliance for MCP tool calls",
   "license": "Apache-2.0",
   "repository": {

@@ -1,6 +1,6 @@
 {
   "name": "@imara/policy",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Policy engine for Imara AI agent governance (YAML rules, glob matching, rate limiting)",
   "license": "Apache-2.0",
   "repository": {

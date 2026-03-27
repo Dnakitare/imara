@@ -1,6 +1,6 @@
 {
   "name": "@imara/proxy",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP proxy with policy enforcement and audit logging for Imara AI agent governance",
   "license": "Apache-2.0",
   "repository": {
