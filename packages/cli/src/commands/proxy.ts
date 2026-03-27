@@ -10,7 +10,7 @@ export function registerProxyCommand(program: Command): void {
     .command('proxy')
     .description('Run the Imara MCP proxy (typically called by wrapped MCP config)')
     .requiredOption('--downstream-command <cmd>', 'Command to run the real MCP server')
-    .requiredOption('--downstream-args <args>', 'Comma-separated args for the downstream command')
+    .requiredOption('--downstream-args <args>', 'JSON-encoded args for the downstream command')
     .requiredOption('--server-name <name>', 'Name of the MCP server being proxied')
     .option('--session-id <id>', 'Session ID for grouping events')
     .action(async (opts) => {
@@ -25,12 +25,21 @@ export function registerProxyCommand(program: Command): void {
             const rules = loadPolicyFile(`${IMARA_POLICIES_DIR}/${file}`);
             policyEngine.setRules([...defaultPolicies, ...rules]);
           }
-        } catch {
-          // Fall back to defaults
+        } catch (err) {
+          console.error(`Warning: Failed to load custom policies, using defaults. ${err instanceof Error ? err.message : err}`);
         }
       }
 
-      const downstreamArgs = opts.downstreamArgs.split(',');
+      let downstreamArgs: string[];
+      try {
+        downstreamArgs = JSON.parse(opts.downstreamArgs);
+        if (!Array.isArray(downstreamArgs)) {
+          downstreamArgs = [opts.downstreamArgs];
+        }
+      } catch {
+        // Backwards compat: old wrapped configs used comma-separated format
+        downstreamArgs = opts.downstreamArgs ? opts.downstreamArgs.split(',') : [];
+      }
 
       await startProxy({
         downstreamCommand: opts.downstreamCommand,

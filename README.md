@@ -1,5 +1,9 @@
 # Imara
 
+[![CI](https://github.com/Dnakitare/imara/actions/workflows/ci.yml/badge.svg)](https://github.com/Dnakitare/imara/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org)
+
 **Runtime governance layer for AI agents.** See every tool call. Enforce policies. Prove compliance.
 
 Imara sits between your AI agent and the tools it uses, providing tamper-proof audit trails, policy enforcement, and a real-time dashboard — with zero config changes to your agent.
@@ -17,7 +21,7 @@ This will:
 - Load a demo session so you can explore immediately
 - Open the dashboard at `http://localhost:3838`
 
-[screenshot placeholder — TODO: add dashboard screenshot]
+<!-- TODO: Add dashboard screenshot here after first deploy -->
 
 ## What You Get
 

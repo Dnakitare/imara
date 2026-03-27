@@ -856,26 +856,26 @@ EOF
     const id = randomUUID();
     const timestamp = new Date(sessionStart + seed.offsetSeconds * 1000).toISOString();
 
-    const partial = {
+    const hashable = {
       id,
       timestamp,
       sessionId,
       serverName: seed.serverName,
+      agentId,
       toolName: seed.toolName,
       toolArguments: seed.toolArguments,
+      toolAnnotations: undefined,
       policyDecision: seed.policyDecision,
+      policiesEvaluated: seed.policiesEvaluated,
+      resultStatus: seed.resultStatus,
       prevHash,
     };
 
-    const eventHash = computeEventHash(partial);
+    const eventHash = computeEventHash(hashable);
 
     const event: AuditEvent = {
-      ...partial,
-      agentId,
-      toolAnnotations: undefined,
+      ...hashable,
       policyReason: seed.policyReason,
-      policiesEvaluated: seed.policiesEvaluated,
-      resultStatus: seed.resultStatus,
       resultSummary: seed.resultSummary,
       resultLatencyMs: seed.resultLatencyMs,
       eventHash,

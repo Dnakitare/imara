@@ -84,7 +84,8 @@ export function registerWrapCommand(program: Command): void {
           continue;
         }
 
-        const downstreamArgs = server.args?.join(',') ?? '';
+        // JSON-encode args to preserve spaces, special chars, and multi-part args
+        const downstreamArgs = JSON.stringify(server.args ?? []);
 
         const wrappedServer: McpServerConfig = {
           command: 'npx',
