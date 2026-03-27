@@ -1,7 +1,15 @@
 {
   "name": "@imara/core",
   "version": "0.1.0",
+  "description": "Core types, schemas, and cryptographic hash chain for Imara AI agent governance",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dnakitare/imara.git",
+    "directory": "packages/core"
+  },
   "type": "module",
+  "files": ["dist"],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
