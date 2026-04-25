@@ -1,5 +1,15 @@
 # Imara
 
+> **Migration notice (April 2026).** Imara's audit store has moved to
+> [Mavryn](https://github.com/Dnakitare/mavryn), the MCP control plane.
+> Mavryn v0.2 ships the hash-chained SQLite audit store originally
+> released here as `@imara/store`, with an extended schema for SDK
+> enrichment, per-user attribution, and RFC 8785 canonical hashing.
+> New audit work happens in Mavryn. `@imara/store@0.1.1` is frozen on
+> npm but remains installable. Policy engine migration is planned for
+> a later Mavryn release; this repo stays online for history and is
+> not accepting new feature work.
+
 [![npm version](https://img.shields.io/npm/v/imara.svg)](https://www.npmjs.com/package/imara)
 [![CI](https://github.com/Dnakitare/imara/actions/workflows/ci.yml/badge.svg)](https://github.com/Dnakitare/imara/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
