@@ -1,159 +1,268 @@
 # Imara
 
-> **Migration notice (April 2026).** Imara's audit store has moved to
-> [Mavryn](https://github.com/Dnakitare/mavryn), the MCP control plane.
-> Mavryn v0.2 ships the hash-chained SQLite audit store originally
-> released here as `@imara/store`, with an extended schema for SDK
-> enrichment, per-user attribution, and RFC 8785 canonical hashing.
-> New audit work happens in Mavryn. `@imara/store@0.1.1` is frozen on
-> npm but remains installable. Policy engine migration is planned for
-> a later Mavryn release; this repo stays online for history and is
-> not accepting new feature work.
-
 [![npm version](https://img.shields.io/npm/v/imara.svg)](https://www.npmjs.com/package/imara)
 [![CI](https://github.com/Dnakitare/imara/actions/workflows/ci.yml/badge.svg)](https://github.com/Dnakitare/imara/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org)
 
-**Runtime governance layer for AI agents.** See every tool call. Enforce policies. Prove compliance.
+**Policy enforcement for MCP agents.** Define rules in YAML. Imara intercepts every tool call, evaluates it, and decides: allow, deny, rate-limit, or escalate — before it reaches the server.
 
-Imara sits between your AI agent and the tools it uses, providing tamper-proof audit trails, policy enforcement, and a real-time dashboard — with zero config changes to your agent.
-
-## Get Started
-
-One command. That's it.
+Ships with sensible defaults. Zero config changes to your agent.
 
 ```bash
 npx imara
 ```
 
-This will:
-- Auto-detect and wrap your MCP servers
-- Load a demo session so you can explore immediately
-- Open the dashboard at `http://localhost:3838`
+![Imara Dashboard](docs/dashboard.png)
 
-<!-- TODO: Add dashboard screenshot here after first deploy -->
+---
 
-## What You Get
+## Why this exists
 
-### Transparent MCP Proxy
-Imara wraps your existing MCP servers. Your agent doesn't know it's there. Every tool call flows through Imara, gets logged, and is evaluated against your policies.
+AI agents now do real work: writing files, running shell commands, pushing to git, calling APIs. Most teams have no way to say "don't let the agent touch main" or "rate-limit writes to 20/minute" without forking the agent itself.
 
-### Cryptographic Audit Trail
-Every event is SHA-256 hash-chained. If anyone tampers with the log, the chain breaks. Run `imara verify` to check integrity at any time.
+Imara solves this at the transport layer. Your agent is unchanged. The rules live in a YAML file you own.
 
-### Policy Engine
-Define rules in YAML. Block destructive operations, rate-limit writes, flag high-risk actions. Ships with sensible defaults out of the box.
+**Timely context:** The EU AI Act's Art. 12 (automatic event logging) and Art. 14 (human oversight) obligations for high-risk AI systems take effect August 2, 2026. If you're deploying agents in healthcare, finance, HR tooling, or any system affecting consequential decisions, Imara's policy engine and audit trail cover both requirements out of the box.
+
+---
+
+## Get started
+
+```bash
+npx imara
+```
+
+This runs the full setup: initializes `~/.imara/`, patches your MCP config to route through the proxy, loads a demo session, and opens the dashboard at `http://localhost:3838`.
+
+To add Imara to an existing project:
+
+```bash
+imara wrap    # patches .mcp.json or Claude Desktop config
+imara unwrap  # restores the original anytime
+```
+
+---
+
+## Policy engine
+
+Rules are YAML files in `~/.imara/policies/`. Imara ships four default rules and evaluates them on every tool call, in priority order.
+
+### Default rules
 
 ```yaml
-- name: block-force-push-to-main
+# Block destructive operations on protected branches
+- name: block-destructive-on-protected-branches
   priority: 10
   match:
     tools:
       - tool: git_push
+      - tool: git_reset
       - tool: git_force_push
     arguments:
       - field: branch
         operator: in
         value: [main, master, production]
   action: deny
-  reason: Force push to protected branches is not allowed
+  reason: Destructive operations on protected branches are not allowed
+  complianceFrameworks: [SOC2-CC6.1, SOC2-CC8.1]
+
+# Rate-limit write operations
+- name: rate-limit-writes
+  priority: 20
+  match:
+    tools:
+      - tool: write_file
+      - tool: create_file
+      - tool: edit_file
+      - tool: "insert_*"
+      - tool: "update_*"
+      - tool: "delete_*"
+  action: allow
+  rateLimit:
+    maxCalls: 20
+    windowSeconds: 60
+
+# Flag destructive operations for review
+- name: flag-destructive-ops
+  priority: 50
+  match:
+    tools:
+      - tool: delete_file
+      - tool: remove_directory
+      - tool: git_push
+      - tool: git_reset
+      - tool: "drop_*"
+      - tool: "rm_*"
+  action: log
+  reason: Destructive operation flagged for review
+  complianceFrameworks: [SOC2-CC6.1]
+
+# Log everything
+- name: log-all
+  priority: 100
+  match:
+    tools:
+      - tool: "*"
+  action: log
 ```
 
-### Real-Time Dashboard
-Visual timeline of every agent action with policy decision badges, latency metrics, and session grouping. The risk summary tells you at a glance what your agents have been doing.
+### Rule actions
 
-### Zero-Config Setup
-`imara wrap` reads your existing `.mcp.json` or Claude Desktop config, wraps every server entry to route through the proxy, and saves a backup. `imara unwrap` restores the original. No manual config editing.
+| Action | Behavior |
+|--------|----------|
+| `deny` | Block the tool call. Returns a reason to the agent. |
+| `allow` | Explicitly allow (overrides lower-priority rules). |
+| `escalate` | Flag for human review. |
+| `log` | Record the call without affecting the decision. |
 
-## CLI Commands
+### Matching
+
+Match by tool name (exact or glob), server name, and argument values:
+
+```yaml
+- name: read-only-mode
+  priority: 5
+  match:
+    tools:
+      - tool: "write_*"
+      - tool: "create_*"
+      - tool: "delete_*"
+  action: deny
+  reason: Agent is in read-only mode
+```
+
+```yaml
+- name: block-external-http
+  priority: 15
+  match:
+    tools:
+      - tool: fetch
+      - tool: http_request
+    arguments:
+      - field: url
+        operator: not_starts_with
+        value: "https://internal.example.com"
+  action: deny
+  reason: External HTTP requests are not allowed
+```
+
+---
+
+## Audit trail
+
+Every tool call is logged to a local SQLite database with a SHA-256 hash chain. If anyone modifies the log, the chain breaks.
+
+```bash
+imara verify   # check chain integrity
+imara tail     # stream events in real time
+imara tail -f  # follow mode
+```
+
+For team deployments with multi-user attribution and richer session data, the audit store lives in [Mavryn](https://github.com/Dnakitare/mavryn). The two work together: Imara handles policy enforcement, Mavryn handles persistence and observability.
+
+---
+
+## Dashboard
+
+```bash
+imara dashboard
+```
+
+Opens at `http://localhost:3838`. Shows a timeline of every agent action, policy decision badges (allowed / denied / flagged), latency per call, and a risk summary for the session.
+
+---
+
+## CLI reference
 
 | Command | Description |
 |---------|-------------|
 | `imara` | Full setup: init + wrap + dashboard |
-| `imara init` | Initialize `~/.imara/` config and database |
-| `imara wrap` | Auto-patch MCP config to route through proxy |
-| `imara unwrap` | Restore original MCP config from backup |
-| `imara tail` | Live stream audit events in terminal |
-| `imara tail -f` | Follow mode — watch events as they happen |
+| `imara init` | Initialize `~/.imara/` |
+| `imara wrap` | Patch MCP config to route through proxy |
+| `imara unwrap` | Restore original MCP config |
+| `imara tail` | Stream audit events |
+| `imara tail -f` | Follow mode |
 | `imara dashboard` | Open the web dashboard |
 | `imara verify` | Verify hash chain integrity |
 | `imara status` | Show monitoring stats |
 
-## How It Works
+---
+
+## How it works
 
 ```
 Your Agent          Imara Proxy              Real MCP Server
-    │                    │                        │
-    │── tools/call ────→ │                        │
-    │                    │── evaluate policy       │
-    │                    │── log audit event       │
-    │                    │── tools/call ─────────→ │
-    │                    │                        │
-    │                    │ ←──── result ────────── │
-    │                    │── log result + hash     │
-    │ ←──── result ───── │                        │
+    |                    |                        |
+    |-- tools/call ----> |                        |
+    |                    |-- evaluate policy       |
+    |                    |-- log audit event       |
+    |                    |-- tools/call ---------> |
+    |                    |                        |
+    |                    | <----- result --------- |
+    |                    |-- log result + hash     |
+    | <---- result ----- |                        |
 ```
 
-## Install
+Imara runs as a local proxy between your agent and your MCP servers. The agent sees the same tool interface it always has. No SDK changes, no agent config changes.
 
-Use the CLI directly:
+---
+
+## Compliance mapping
+
+| Requirement | Framework | How Imara addresses it |
+|-------------|-----------|------------------------|
+| Automatic event logging | EU AI Act Art. 12 | Hash-chained audit trail for every tool call |
+| Human oversight | EU AI Act Art. 14 | `escalate` action routes calls for human review |
+| Change management | SOC 2 CC6.1, CC8.1 | Policy rules with compliance tags |
+| Access controls | HIPAA audit controls | Per-tool deny rules with logged reasons |
+| AI management | ISO 42001 | Policy-as-code with versioned YAML |
+
+---
+
+## Install
 
 ```bash
 npx imara
 ```
 
-Or install individual packages for programmatic use:
+Or install packages for programmatic use:
 
 ```bash
-npm install @imara/core       # Types, schemas, hash chain
-npm install @imara/policy     # Policy engine
-npm install @imara/store      # Audit storage (SQLite)
-npm install @imara/proxy      # MCP proxy
+npm install @imara/core     # types, schemas, hash chain
+npm install @imara/policy   # policy engine
+npm install @imara/proxy    # MCP proxy
+npm install @imara/store    # local SQLite audit store
 ```
+
+---
 
 ## Architecture
 
 Monorepo with clean package boundaries:
 
-- **[@imara/core](https://www.npmjs.com/package/@imara/core)** — Types, Zod schemas, SHA-256 hash chaining
-- **[@imara/store](https://www.npmjs.com/package/@imara/store)** — Audit event storage (SQLite for local, Postgres planned)
-- **[@imara/policy](https://www.npmjs.com/package/@imara/policy)** — TypeScript-native policy evaluation engine
+- **[@imara/core](https://www.npmjs.com/package/@imara/core)** — types, Zod schemas, SHA-256 hash chaining
+- **[@imara/policy](https://www.npmjs.com/package/@imara/policy)** — policy evaluation engine
 - **[@imara/proxy](https://www.npmjs.com/package/@imara/proxy)** — MCP proxy with tool call interception
-- **@imara/dashboard** — Next.js web UI with timeline view
+- **[@imara/store](https://www.npmjs.com/package/@imara/store)** — local SQLite audit store
+- **@imara/dashboard** — Next.js web UI
 
-## Why Imara?
-
-AI agents are doing real work — reading files, executing code, calling APIs, pushing to git. But most teams have **zero visibility** into what their agents actually do.
-
-Existing tools don't solve this:
-- **Observability platforms** (LangSmith, Langfuse) show traces but don't enforce policies
-- **Security tools** (Zenity, Lakera) focus on prompt injection, not runtime governance
-- **Nothing** provides compliance-grade audit trails for agent actions
-
-Imara fills the gap: runtime governance with cryptographic proof.
-
-### Compliance Ready
-
-Imara's audit trail maps to major compliance frameworks:
-- **EU AI Act** Art. 12 (record-keeping) & Art. 14 (human oversight)
-- **SOC 2** CC6.1, CC8.1 (change management)
-- **HIPAA** audit controls
-- **ISO 42001** AI management systems
+---
 
 ## Roadmap
 
 - [x] MCP proxy with transparent interception
 - [x] SHA-256 hash-chained audit trail
-- [x] YAML policy engine with glob matching
+- [x] YAML policy engine with glob matching and rate limiting
 - [x] Real-time dashboard with timeline view
-- [x] Zero-config `imara wrap` setup
-- [ ] Postgres store for team deployments
-- [ ] Team mode with multi-user access
-- [ ] Compliance report exports (EU AI Act, SOC 2)
+- [x] Zero-config `imara wrap` / `imara unwrap`
+- [ ] `imara policy test --tool <name> --args '{...}'` — test rules without running the proxy
+- [ ] Compliance report export (EU AI Act Art. 12 + Art. 14)
 - [ ] Human-in-the-loop escalation workflows
-- [ ] SSE/WebSocket transport support
-- [ ] Docker Compose for server deployment
+- [ ] SSE/WebSocket MCP transport support
+- [ ] Team mode via [Mavryn](https://github.com/Dnakitare/mavryn)
+
+---
 
 ## Development
 
@@ -164,8 +273,6 @@ pnpm install
 pnpm build
 node packages/cli/dist/cli.js
 ```
-
-## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
