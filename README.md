@@ -9,6 +9,8 @@
 
 Ships with sensible defaults. Zero config changes to your agent.
 
+**Imara and Mavryn.** Imara is the policy and audit layer for a single MCP server's tool calls: it intercepts each call, applies your rules, and writes the hash-chained record. [Mavryn](https://github.com/Dnakitare/mavryn) is the gateway that consolidates many MCP servers behind one endpoint. They compose: run Mavryn to route across your servers, wrap it with Imara to govern and audit what flows through. Different layers of the same stack.
+
 ```bash
 npx imara
 ```
