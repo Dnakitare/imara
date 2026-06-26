@@ -66,23 +66,31 @@ export async function startProxy(config: ProxyConfig): Promise<void> {
     // Evaluate policy
     const policyResult = interceptor.evaluatePolicy(toolName, toolArgs);
 
-    if (policyResult.decision === 'deny') {
-      // Log the blocked call
+    // Both deny and escalate stop the call. Escalate is held for human approval;
+    // because there is no automated approval path yet, it fails closed (the call is
+    // not forwarded) rather than passing through, so "escalate" never behaves as "allow".
+    if (policyResult.decision === 'deny' || policyResult.decision === 'escalate') {
+      const escalated = policyResult.decision === 'escalate';
+
       interceptor.createAndStoreEvent({
         toolName,
         toolArguments: toolArgs,
-        policyDecision: 'deny',
+        policyDecision: policyResult.decision,
         policyReason: policyResult.reason,
         policiesEvaluated: policyResult.policiesEvaluated,
         resultStatus: 'blocked',
-        resultSummary: `Blocked by policy: ${policyResult.reason}`,
+        resultSummary: escalated
+          ? `Escalated for human approval (held): ${policyResult.reason}`
+          : `Blocked by policy: ${policyResult.reason}`,
       });
 
       return {
         content: [
           {
             type: 'text' as const,
-            text: `[IMARA] Tool call blocked: ${policyResult.reason}`,
+            text: escalated
+              ? `[IMARA] Tool call held for human approval: ${policyResult.reason}`
+              : `[IMARA] Tool call blocked: ${policyResult.reason}`,
           },
         ],
         isError: true,

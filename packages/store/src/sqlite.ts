@@ -70,6 +70,15 @@ export class SqliteAuditStore implements AuditStore {
   }
 
   append(event: AuditEvent): void {
+    // Low-level primitive (used for seeding/restore): the caller owns prevHash,
+    // but the stored hash must match the event's contents. Reject inconsistent
+    // rows so an "append-only" store can never hold an unverifiable entry.
+    // Prefer appendAtomic() for live writes — it computes the chain for you.
+    const expectedHash = computeEventHash(event);
+    if (event.eventHash !== expectedHash) {
+      throw new Error('append: eventHash does not match event contents');
+    }
+
     const stmt = this.db.prepare(`
       INSERT INTO events (
         id, timestamp, session_id, server_name, agent_id,
@@ -246,8 +255,11 @@ export class SqliteAuditStore implements AuditStore {
   }
 
   getAllEvents(limit = 1000, offset = 0): AuditEvent[] {
+    // Return events in chain (insertion) order — the same order getLatestHash uses
+    // to build the chain — so verification reads links in the order they were created,
+    // independent of event timestamps (which can be skewed or backdated).
     const rows = this.db.prepare(
-      'SELECT * FROM events ORDER BY timestamp ASC LIMIT ? OFFSET ?'
+      'SELECT * FROM events ORDER BY created_at ASC, rowid ASC LIMIT ? OFFSET ?'
     ).all(limit, offset) as any[];
     return rows.map(this.rowToEvent);
   }

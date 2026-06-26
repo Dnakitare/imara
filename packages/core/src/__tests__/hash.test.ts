@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeEventHash, verifyChain, type HashableEvent } from '../hash.js';
+import { computeEventHash, verifyChain, type HashableEvent, type VerifiableEvent } from '../hash.js';
 
 function makeEvent(overrides: Partial<HashableEvent> = {}): HashableEvent {
   return {
@@ -66,11 +66,17 @@ describe('computeEventHash', () => {
     const h2 = computeEventHash({ ...event });
     expect(h1).toBe(h2);
   });
+
+  it('hashes nested arguments equally regardless of key order (canonicalized)', () => {
+    const a = computeEventHash(makeEvent({ toolArguments: { branch: 'main', force: true } }));
+    const b = computeEventHash(makeEvent({ toolArguments: { force: true, branch: 'main' } }));
+    expect(a).toBe(b);
+  });
 });
 
 describe('verifyChain', () => {
-  function buildChain(count: number): (HashableEvent & { eventHash: string })[] {
-    const chain: (HashableEvent & { eventHash: string })[] = [];
+  function buildChain(count: number): VerifiableEvent[] {
+    const chain: VerifiableEvent[] = [];
     for (let i = 0; i < count; i++) {
       const event = makeEvent({
         id: `evt-${i}`,
@@ -84,39 +90,72 @@ describe('verifyChain', () => {
   }
 
   it('validates a correct single-event chain', () => {
-    const chain = buildChain(1);
-    expect(verifyChain(chain)).toEqual({ valid: true });
+    expect(verifyChain(buildChain(1))).toEqual({ valid: true });
   });
 
   it('validates a correct multi-event chain', () => {
-    const chain = buildChain(5);
-    expect(verifyChain(chain)).toEqual({ valid: true });
-  });
-
-  it('detects a tampered event hash', () => {
-    const chain = buildChain(3);
-    chain[1].eventHash = 'tampered';
-    expect(verifyChain(chain)).toEqual({ valid: false, brokenAt: 1 });
-  });
-
-  it('detects a broken chain link (wrong prevHash)', () => {
-    const chain = buildChain(3);
-    chain[2] = {
-      ...chain[2],
-      prevHash: 'wrong-link',
-    };
-    chain[2].eventHash = computeEventHash(chain[2]);
-    expect(verifyChain(chain)).toEqual({ valid: false, brokenAt: 2 });
+    expect(verifyChain(buildChain(5))).toEqual({ valid: true });
   });
 
   it('returns valid for an empty chain', () => {
     expect(verifyChain([])).toEqual({ valid: true });
   });
 
-  it('works with events that lack eventHash (recomputes)', () => {
-    const events: HashableEvent[] = [
-      makeEvent({ id: 'evt-0', prevHash: null }),
-    ];
-    expect(verifyChain(events)).toEqual({ valid: true });
+  it('detects a tampered event hash', () => {
+    const chain = buildChain(3);
+    chain[1].eventHash = 'tampered';
+    const result = verifyChain(chain);
+    expect(result.valid).toBe(false);
+    expect(result.brokenAt).toBe(1);
+  });
+
+  it('detects a tampered field even when the stored hash is left unchanged', () => {
+    const chain = buildChain(3);
+    chain[1].toolName = 'rm_rf'; // mutate content, keep old eventHash
+    const result = verifyChain(chain);
+    expect(result.valid).toBe(false);
+    expect(result.brokenAt).toBe(1);
+  });
+
+  it('detects a broken chain link (wrong prevHash)', () => {
+    const chain = buildChain(3);
+    chain[2] = { ...chain[2], prevHash: 'wrong-link' };
+    chain[2].eventHash = computeEventHash(chain[2]);
+    const result = verifyChain(chain);
+    expect(result.valid).toBe(false);
+    expect(result.brokenAt).toBe(2);
+  });
+
+  it('detects a deleted prefix via the genesis anchor', () => {
+    const chain = buildChain(4);
+    const truncated = chain.slice(1); // drop the real genesis
+    const result = verifyChain(truncated);
+    expect(result.valid).toBe(false);
+    expect(result.brokenAt).toBe(0);
+    expect(result.reason).toMatch(/genesis/i);
+  });
+
+  it('detects end-truncation against a recorded head anchor', () => {
+    const chain = buildChain(5);
+    const head = chain[4].eventHash;
+    const result = verifyChain(chain.slice(0, 4), { expectedHead: head });
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/head/i);
+  });
+
+  it('detects a count mismatch against a recorded count', () => {
+    const chain = buildChain(5);
+    const result = verifyChain(chain.slice(0, 4), { expectedCount: 5 });
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/count/i);
+  });
+
+  it('passes when head and count anchors match', () => {
+    const chain = buildChain(5);
+    const result = verifyChain(chain, {
+      expectedHead: chain[4].eventHash,
+      expectedCount: 5,
+    });
+    expect(result).toEqual({ valid: true });
   });
 });

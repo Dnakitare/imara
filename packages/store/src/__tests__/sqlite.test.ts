@@ -22,16 +22,8 @@ function makeEvent(overrides: Partial<AuditEvent> = {}, prevHash: string | null 
 
   const merged = { ...base, ...overrides, prevHash: overrides.prevHash ?? prevHash };
 
-  merged.eventHash = computeEventHash({
-    id: merged.id,
-    timestamp: merged.timestamp,
-    sessionId: merged.sessionId,
-    serverName: merged.serverName,
-    toolName: merged.toolName,
-    toolArguments: merged.toolArguments,
-    policyDecision: merged.policyDecision,
-    prevHash: merged.prevHash,
-  });
+  // Hash over the full event so the stored hash matches a recompute over all fields.
+  merged.eventHash = computeEventHash(merged);
 
   return merged;
 }
@@ -279,6 +271,26 @@ describe('SqliteAuditStore', () => {
 
       const { valid } = verifyChain(allEvents);
       expect(valid).toBe(true);
+    });
+
+    it('verifies in chain order even when event timestamps are out of order', () => {
+      // Backdated / clock-skewed timestamps must not break verification: the chain
+      // is read in insertion order, not timestamp order.
+      const base = {
+        sessionId: 'sess-1',
+        serverName: 'test-server',
+        toolName: 'read_file',
+        toolArguments: {},
+        policyDecision: 'allow' as const,
+        policiesEvaluated: [],
+      };
+      store.appendAtomic({ ...base, id: crypto.randomUUID(), timestamp: '2026-03-27T00:00:09.000Z' });
+      store.appendAtomic({ ...base, id: crypto.randomUUID(), timestamp: '2026-03-27T00:00:05.000Z' });
+      store.appendAtomic({ ...base, id: crypto.randomUUID(), timestamp: '2026-03-27T00:00:01.000Z' });
+
+      const events = store.getAllEvents();
+      expect(events).toHaveLength(3);
+      expect(verifyChain(events).valid).toBe(true);
     });
 
     it('persists events retrievable by query', () => {
