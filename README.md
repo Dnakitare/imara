@@ -153,13 +153,15 @@ Match by tool name (exact or glob), server name, and argument values:
 
 ## Audit trail
 
-Every tool call is logged to a local SQLite database with a SHA-256 hash chain. If anyone modifies the log, the chain breaks.
+Every tool call is logged to a local SQLite database with a SHA-256 hash chain anchored at its genesis event. If anyone edits or reorders an event, the chain breaks. `imara verify` also records a head anchor in `~/.imara/anchor.json`, so deletion or truncation of already-verified events is caught on the next run.
 
 ```bash
 imara verify   # check chain integrity
 imara tail     # stream events in real time
 imara tail -f  # follow mode
 ```
+
+> **Upgrading from 0.1.x?** 0.2.0 changes the audit hash format: events are canonically serialized before hashing, so a log written by 0.1.x will not verify under 0.2.0. Treat 0.2.0 as a fresh baseline. Archive any `~/.imara/audit.db` you need to keep, then run `imara verify` to establish a new anchor. Details in the [CHANGELOG](CHANGELOG.md).
 
 For team deployments with multi-user attribution and richer session data, the audit store lives in [Mavryn](https://github.com/Dnakitare/mavryn). The two work together: Imara handles policy enforcement, Mavryn handles persistence and observability.
 
