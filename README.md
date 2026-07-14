@@ -25,6 +25,8 @@ AI agents now do real work: writing files, running shell commands, pushing to gi
 
 Imara solves this at the transport layer. Your agent is unchanged. The rules live in a YAML file you own.
 
+**Postmortem, read before trusting any audit chain (including this one):** the 0.2.0 release changed the canonical serialization and broke verification of 0.1.x chains. I wrote up what happened and what a migration that preserves the tamper-evidence property should look like: [I broke my own audit log](https://dnakitare.github.io/writing/i-broke-my-own-audit-log.html).
+
 **Timely context:** The EU AI Act's Art. 12 (automatic event logging) and Art. 14 (human oversight) obligations for high-risk AI systems take effect August 2, 2026. If you're deploying agents in healthcare, finance, HR tooling, or any system affecting consequential decisions, Imara's policy engine and audit trail are designed to support both obligations. Whether a given deployment satisfies them is a compliance determination, not a library feature.
 
 ---
