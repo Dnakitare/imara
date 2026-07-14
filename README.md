@@ -5,9 +5,9 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org)
 
-**Policy enforcement for MCP agents.** Define rules in YAML. Imara intercepts every tool call, evaluates it, and decides: allow, deny, rate-limit, or escalate — before it reaches the server.
+**Policy enforcement for MCP agents.** Define rules in YAML. Imara intercepts every tool call and decides before it reaches the server: allow, deny, rate-limit, or escalate.
 
-Ships with sensible defaults. Zero config changes to your agent.
+Ships with sensible defaults. One command (`imara wrap`) reroutes your MCP config through the proxy; your agent code doesn't change.
 
 **Imara and Mavryn.** Imara is the policy and audit layer for a single MCP server's tool calls: it intercepts each call, applies your rules, and writes the hash-chained record. [Mavryn](https://github.com/Dnakitare/mavryn) is the gateway that consolidates many MCP servers behind one endpoint. They compose: run Mavryn to route across your servers, wrap it with Imara to govern and audit what flows through. Different layers of the same stack.
 
@@ -25,7 +25,7 @@ AI agents now do real work: writing files, running shell commands, pushing to gi
 
 Imara solves this at the transport layer. Your agent is unchanged. The rules live in a YAML file you own.
 
-**Timely context:** The EU AI Act's Art. 12 (automatic event logging) and Art. 14 (human oversight) obligations for high-risk AI systems take effect August 2, 2026. If you're deploying agents in healthcare, finance, HR tooling, or any system affecting consequential decisions, Imara's policy engine and audit trail cover both requirements out of the box.
+**Timely context:** The EU AI Act's Art. 12 (automatic event logging) and Art. 14 (human oversight) obligations for high-risk AI systems take effect August 2, 2026. If you're deploying agents in healthcare, finance, HR tooling, or any system affecting consequential decisions, Imara's policy engine and audit trail are designed to support both obligations. Whether a given deployment satisfies them is a compliance determination, not a library feature.
 
 ---
 
@@ -282,4 +282,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Apache 2.0; see [LICENSE](LICENSE).
